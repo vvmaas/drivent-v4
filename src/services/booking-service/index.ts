@@ -2,7 +2,7 @@ import bookingRepository from "@/repositories/booking-repository.ts";
 import enrollmentRepository from "@/repositories/enrollment-repository";
 import ticketRepository from "@/repositories/ticket-repository";
 import roomRepository from "@/repositories/room-repository";
-import { notFoundError, forbiddenError } from "@/errors";
+import { notFoundError, forbiddenError, badRequestError } from "@/errors";
 
 async function getBooking(userId: number) {
   const booking = await bookingRepository.findBooking(userId);
@@ -13,9 +13,14 @@ async function getBooking(userId: number) {
   return booking;
 }
 
+async function getBookingId(roomId: number, userId: number) {
+  return await bookingRepository.findBookingId(roomId, userId);
+}
+
 async function postBooking(roomId: number, userId: number) {
-  checkForBooking(userId);
-  checkRoom(roomId);
+  await validateId(roomId);
+  await checkForBooking(userId);
+  await checkRoom(roomId);
 
   const bookingData = {
     userId,
@@ -27,9 +32,15 @@ async function postBooking(roomId: number, userId: number) {
 }
 
 async function putBooking(bookingId: number, roomId: number, userId: number) {
-  checkForBooking(userId);
-  checkRoom(roomId);
-  checkUserBooking(userId);
+  await validateId(roomId);
+  await validateId(bookingId);
+  await checkRoom(roomId);
+
+  const booking = await checkUserBooking(userId);
+
+  if(booking.id !== bookingId) {
+    throw forbiddenError();
+  }
   
   const bookingData = {
     userId,
@@ -43,7 +54,7 @@ async function putBooking(bookingId: number, roomId: number, userId: number) {
 async function checkForBooking(userId: number) {
   const enrollment = await enrollmentRepository.findWithAddressByUserId(userId);
   if (!enrollment) {
-    throw notFoundError();
+    throw forbiddenError();
   }
   const ticket = await ticketRepository.findTicketByEnrollmentId(enrollment.id);
 
@@ -67,10 +78,18 @@ async function checkRoom(roomId: number) {
 }
 
 async function checkUserBooking(userId: number) {
-  const booking = await bookingRepository.findBookingsByUser(userId);
+  const booking = await bookingRepository.findBookingByUser(userId);
 
   if(!booking) {
     throw forbiddenError();
+  }
+
+  return booking;
+}
+
+async function validateId(id: number) {
+  if(id == null || id<0 || isNaN(id)) {
+    throw badRequestError();
   }
 }
 
@@ -78,6 +97,7 @@ const bookingService = {
   getBooking,
   postBooking,
   putBooking,
+  getBookingId,
 };
   
 export default bookingService;
